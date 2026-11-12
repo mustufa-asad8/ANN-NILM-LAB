@@ -9,6 +9,7 @@ WORKDIR /app
 
 COPY requirements.txt requirements-training.txt README.md ./
 COPY src/ src/
+COPY data/hosted/ data/hosted/
 COPY .streamlit/ .streamlit/
 
 RUN python -m pip install --no-cache-dir --upgrade pip \

@@ -9,6 +9,12 @@ Keep the instructor-provided source files in `data/raw/` using these paths:
 | New York | `new_york/readings_1min.csv` | `new_york/metadata.csv` |
 | Puerto Rico | Monthly metric CSVs (`*.csv.gz`) | `puerto_rico/metadata.csv` |
 
+`hosted/austin_eligible_homes.csv.gz` is the deployment-ready Austin subset.
+It contains only the 15 eligible Austin homes and the six fields needed for
+training (`dataid`, `localminute`, `grid`, `air1`, `furnace1`, `drye1`). This
+subset is included in the public app so Streamlit Cloud can train without
+downloading the multi-gigabyte source file.
+
 The Austin, California, and New York wide CSV files contain one-minute
 whole-home and appliance readings and can be selected in the dashboard or
 training script. Puerto Rico is supplied as separate monthly measurements
@@ -16,7 +22,7 @@ training script. Puerto Rico is supplied as separate monthly measurements
 that layout is retained as received but is not yet a supported input format
 for the NILM training pipeline.
 
-The raw files are large and excluded from Docker build context and source
+The full raw files are large and excluded from Docker build context and source
 control. Do not rename or edit their column headers; the experiment expects
 `dataid`, `localminute`, `grid`, `air1`, `furnace1`, and `drye1` in the
 supported wide CSV files.

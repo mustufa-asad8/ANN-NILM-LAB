@@ -19,6 +19,8 @@ data/
     california/   readings_1min.csv, metadata.csv
     new_york/     readings_1min.csv, metadata.csv
     puerto_rico/  monthly measurement files and metadata
+  hosted/
+    austin_eligible_homes.csv.gz
 src/
   nilm_ccp/
     dashboard.py
@@ -35,9 +37,9 @@ artifacts/
   reports/
 ```
 
-Regional source data is kept out of the application package and is not copied
-into the Docker image. See [data/README.md](data/README.md) for the supplied
-file formats and expected locations.
+Full regional source data is kept out of the application package and is not
+copied into the Docker image. The compact Austin cohort is included for cloud
+training. See [data/README.md](data/README.md) for the supplied file formats.
 
 ## Requirements and setup
 
@@ -47,11 +49,11 @@ Python 3.10 or newer is recommended. From PowerShell:
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
-python -m pip install -r requirements-training.txt
 ```
 
-`requirements.txt` installs the dashboard and data-analysis dependencies.
-`requirements-training.txt` includes those dependencies and PyTorch.
+`requirements.txt` installs the dashboard, data-analysis, and PyTorch
+dependencies so Streamlit Cloud can train. `requirements-training.txt` is a
+convenience include for local training.
 
 Run the focused regression tests with:
 
@@ -65,8 +67,9 @@ python -m unittest discover -s tests -v
 streamlit run src\nilm_ccp\dashboard.py
 ```
 
-The deployed Streamlit Community Cloud app uses the root `app.py` entrypoint
-and reads its committed Austin evaluation artifacts. The app is available at
+The deployed Streamlit Community Cloud app uses the root `app.py` entrypoint.
+It trains on the hosted Austin cohort and also displays the committed Austin
+evaluation artifacts. The app is available at
 [ann-nilm-lab-ct466.streamlit.app](https://ann-nilm-lab-ct466.streamlit.app/).
 To connect a new deployment, select this GitHub repository, branch `main`, and
 main file path `app.py`.
@@ -74,13 +77,15 @@ main file path `app.py`.
 Choose a supported region, eligible homes, a held-out home, and training
 settings in the sidebar. The dashboard scans the selected CSV for complete
 `grid`/target records and homes with ON and OFF examples. It randomly selects
-up to 15 eligible homes by default; the unseen-home test uses one complete
+five eligible homes by default; the unseen-home test uses one complete
 selected home that is excluded from fitting and calibration.
 
-The wide CSV datasets supported by the experiment are Austin, California, and
-New York. The supplied Puerto Rico data is organized as monthly measurement
-files rather than the wide household CSV format, so it is preserved under
-`data/raw/puerto_rico` but is not currently selectable by the experiment.
+Only Austin currently has enough eligible households to meet the CCP’s
+five-home minimum (15 eligible homes in the supplied dataset). New York has
+four qualifying homes and California has none for the selected circuits, so
+they cannot run this experiment even if their full CSVs are available. The
+supplied Puerto Rico data is organized as monthly measurements rather than the
+wide household CSV format and is not currently supported.
 
 ## Train and evaluate
 

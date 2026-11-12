@@ -28,6 +28,9 @@ REGION_FILES = {
     "California": ROOT / "data" / "raw" / "california" / "readings_1min.csv",
     "Austin": ROOT / "data" / "raw" / "austin" / "readings_1min.csv",
 }
+HOSTED_REGION_FILES = {
+    "Austin": ROOT / "data" / "hosted" / "austin_eligible_homes.csv.gz",
+}
 LEGACY_REGION_FILES = {
     "New York": ROOT / "1minute_data_newyork" / "1minute_data_newyork.csv",
     "California": ROOT
@@ -43,7 +46,7 @@ REGION_KEYS = {"New York": "newyork", "California": "california", "Austin": "aus
 REQUIRED_SIGNAL_COLUMNS = ("grid", "air1", "furnace1", "drye1")
 MIN_COMPLETE_READINGS = 10_000
 MIN_CLASS_READINGS = 100
-MAX_DEFAULT_HOMES = 15
+DEFAULT_HOME_COUNT = 5
 PLOT_FILES = {
     "chronological_test": (
         "chronological_test_confusion_matrices.png",
@@ -477,17 +480,27 @@ def main() -> None:
             index=2,
             key="dataset_region",
         )
+        default_dataset = REGION_FILES[region_name]
+        if not default_dataset.is_file():
+            default_dataset = HOSTED_REGION_FILES.get(region_name, default_dataset)
         dataset_path_key = f"dataset_path_{REGION_KEYS[region_name]}"
         saved_dataset_path = st.session_state.get(dataset_path_key)
         if (
             saved_dataset_path is not None
-            and Path(str(saved_dataset_path)).expanduser().resolve()
-            == LEGACY_REGION_FILES[region_name].resolve()
+            and (
+                Path(str(saved_dataset_path)).expanduser().resolve()
+                == LEGACY_REGION_FILES[region_name].resolve()
+                or (
+                    not REGION_FILES[region_name].is_file()
+                    and Path(str(saved_dataset_path)).expanduser().resolve()
+                    == REGION_FILES[region_name].resolve()
+                )
+            )
         ):
-            st.session_state[dataset_path_key] = str(REGION_FILES[region_name])
+            st.session_state[dataset_path_key] = str(default_dataset)
         dataset_path = st.text_input(
             "CSV file path",
-            value=str(REGION_FILES[region_name]),
+            value=str(default_dataset),
             key=dataset_path_key,
         )
         selected_file = Path(dataset_path).expanduser()
@@ -513,7 +526,7 @@ def main() -> None:
             st.session_state["_eligible_homes"] = eligible_homes
             st.session_state["_home_selection_token"] = selection_token
             if len(eligible_homes) >= 5:
-                default_count = min(MAX_DEFAULT_HOMES, len(eligible_homes))
+                default_count = min(DEFAULT_HOME_COUNT, len(eligible_homes))
                 selected_homes, unseen_home = random_home_selection(
                     eligible_homes, default_count
                 )
@@ -566,11 +579,18 @@ def main() -> None:
                     "This region has fewer than five eligible homes for grid, air1, "
                     "furnace1, and drye1. Choose another region or dataset."
                 )
+            elif region_name in ("New York", "California"):
+                eligible_count = {"New York": 4, "California": 0}[region_name]
+                st.info(
+                    f"The {region_name} CSV is not included in the hosted training "
+                    f"data. The supplied dataset has {eligible_count} eligible homes; "
+                    "the CCP requires at least five, so this region cannot run the "
+                    "current experiment. Select Austin to train."
+                )
             else:
                 st.info(
-                    "The regional CSV is not hosted with this public dashboard. "
-                    "Saved evaluation results are available below; run new "
-                    "experiments locally or with Docker and the dataset files."
+                    "No dataset file is available at this path. Select Austin for "
+                    "the hosted training cohort, or provide a local CSV path."
                 )
         home_text = st.text_input(
             "Home IDs (5 or more)",
@@ -605,7 +625,7 @@ def main() -> None:
     with state_col:
         st.markdown(
             f'<div class="mini-card"><div class="label">DATA SOURCE</div>'
-            f'<div class="value">{"Ready" if file_exists else "Not hosted"}</div>'
+            f'<div class="value">{"Ready" if file_exists else "Unavailable"}</div>'
             f'<div class="label">{selected_file.name}</div></div>',
             unsafe_allow_html=True,
         )
