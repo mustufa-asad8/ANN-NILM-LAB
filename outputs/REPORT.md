@@ -14,7 +14,7 @@ never model inputs. Source readings are kW and reported power errors are W.
 - Training/validation homes: 8565, 2361, 6139, 7536, 8156, 9019, 4767, 3456, 7901, 4373, 2335, 9922, 9278, 661
 - Unseen-home test: 7951 (complete held-out home; no training or threshold fitting)
 - Input column: `grid`; target columns: `air1`, `furnace1`, `drye1`
-- Input window: 60 consecutive one-minute whole-home readings
+- Input window: 120 consecutive one-minute whole-home readings
 - Per development home: chronological 70% train, 15% validation, and 15%
   chronological test. The complete final home is a separate unseen-home test.
 - Windows do not cross split or missing-data boundaries.
@@ -36,18 +36,18 @@ include every scored minute.
 
 | Split | Appliance | ON examples | OFF examples |
 |---|---|---:|---:|
-| train | Air compressor circuit | 61130 | 191556 |
-| train | Furnace and air handler | 92934 | 159752 |
-| train | Electric clothes dryer | 5241 | 247445 |
-| validation | Air compressor circuit | 10667 | 43415 |
-| validation | Furnace and air handler | 15238 | 38844 |
-| validation | Electric clothes dryer | 1020 | 53062 |
-| chronological_test | Air compressor circuit | 13690 | 1043390 |
-| chronological_test | Furnace and air handler | 212258 | 844822 |
-| chronological_test | Electric clothes dryer | 21398 | 1035682 |
-| unseen_test | Air compressor circuit | 59716 | 465825 |
-| unseen_test | Furnace and air handler | 67438 | 458103 |
-| unseen_test | Electric clothes dryer | 13744 | 511797 |
+| train | Air compressor circuit | 61111 | 191453 |
+| train | Furnace and air handler | 92877 | 159687 |
+| train | Electric clothes dryer | 5238 | 247326 |
+| validation | Air compressor circuit | 10627 | 43360 |
+| validation | Furnace and air handler | 15193 | 38794 |
+| validation | Electric clothes dryer | 1020 | 52967 |
+| chronological_test | Air compressor circuit | 13597 | 1032869 |
+| chronological_test | Furnace and air handler | 210697 | 835769 |
+| chronological_test | Electric clothes dryer | 21194 | 1025272 |
+| unseen_test | Air compressor circuit | 59716 | 465765 |
+| unseen_test | Furnace and air handler | 67427 | 458054 |
+| unseen_test | Electric clothes dryer | 13744 | 511737 |
 
 ## Models and training
 
@@ -55,9 +55,9 @@ include every scored minute.
   are excluded, and sequences are split at missing-minute gaps.
 - Appliance targets are clipped at zero to remove negative sensor artifacts.
   Input normalization statistics are fit using training readings only.
-- MLP: flattened 60-minute input, two hidden layers, shared encoder, status and
+- MLP: flattened 120-minute input, two hidden layers, shared encoder, status and
   power output heads.
-- 1D-CNN: convolutional encoder over the 60-minute input, with the same two
+- 1D-CNN: convolutional encoder over the 120-minute input, with the same two
   output tasks.
 - Both models use class-weighted binary cross entropy plus smooth L1 power loss.
   The best checkpoint is selected by mean validation macro-F1, with mean
@@ -74,12 +74,12 @@ include every scored minute.
 
 | Model | Appliance | Status cutoff | Validation macro-F1 | Validation balanced accuracy |
 |---|---|---:|---:|---:|
-| MLP | Air compressor circuit | 0.775 | 0.904 | 0.913 |
-| MLP | Furnace and air handler | 0.660 | 0.833 | 0.825 |
-| MLP | Electric clothes dryer | 0.945 | 0.847 | 0.842 |
-| 1D-CNN | Air compressor circuit | 0.740 | 0.914 | 0.920 |
-| 1D-CNN | Furnace and air handler | 0.605 | 0.859 | 0.861 |
-| 1D-CNN | Electric clothes dryer | 0.950 | 0.870 | 0.876 |
+| MLP | Air compressor circuit | 0.730 | 0.906 | 0.915 |
+| MLP | Furnace and air handler | 0.655 | 0.834 | 0.821 |
+| MLP | Electric clothes dryer | 0.925 | 0.841 | 0.830 |
+| 1D-CNN | Air compressor circuit | 0.820 | 0.928 | 0.932 |
+| 1D-CNN | Furnace and air handler | 0.760 | 0.875 | 0.872 |
+| 1D-CNN | Electric clothes dryer | 0.950 | 0.866 | 0.871 |
 
 ## Chronological test results
 
@@ -89,12 +89,12 @@ include appliance-OFF periods.
 
 | Model | Appliance | Accuracy | Balanced accuracy | Macro-F1 | Status cutoff | MAE (W) | RMSE (W) |
 |---|---|---:|---:|---:|---:|---:|---:|
-| MLP | Air compressor circuit | 0.950 | 0.926 | 0.647 | 0.775 | 133.1 | 505.9 |
-| MLP | Furnace and air handler | 0.796 | 0.622 | 0.636 | 0.660 | 119.5 | 241.4 |
-| MLP | Electric clothes dryer | 0.989 | 0.834 | 0.849 | 0.945 | 43.8 | 349.8 |
-| 1D-CNN | Air compressor circuit | 0.958 | 0.938 | 0.668 | 0.740 | 118.4 | 486.1 |
-| 1D-CNN | Furnace and air handler | 0.810 | 0.648 | 0.664 | 0.605 | 114.4 | 234.0 |
-| 1D-CNN | Electric clothes dryer | 0.990 | 0.874 | 0.870 | 0.950 | 41.8 | 340.5 |
+| MLP | Air compressor circuit | 0.954 | 0.932 | 0.658 | 0.730 | 121.7 | 491.5 |
+| MLP | Furnace and air handler | 0.797 | 0.595 | 0.609 | 0.655 | 118.6 | 238.4 |
+| MLP | Electric clothes dryer | 0.988 | 0.829 | 0.841 | 0.925 | 44.1 | 356.3 |
+| 1D-CNN | Air compressor circuit | 0.969 | 0.904 | 0.697 | 0.820 | 107.1 | 462.2 |
+| 1D-CNN | Furnace and air handler | 0.830 | 0.692 | 0.709 | 0.760 | 109.0 | 217.7 |
+| 1D-CNN | Electric clothes dryer | 0.990 | 0.876 | 0.873 | 0.950 | 40.6 | 330.5 |
 
 ## Unseen-home results
 
@@ -102,12 +102,12 @@ Home 7951 was excluded completely from training and validation.
 
 | Model | Appliance | Accuracy | Balanced accuracy | Macro-F1 | Status cutoff | MAE (W) | RMSE (W) |
 |---|---|---:|---:|---:|---:|---:|---:|
-| MLP | Air compressor circuit | 0.909 | 0.882 | 0.814 | 0.775 | 294.5 | 824.2 |
-| MLP | Furnace and air handler | 0.890 | 0.863 | 0.797 | 0.660 | 166.1 | 606.6 |
-| MLP | Electric clothes dryer | 0.970 | 0.836 | 0.768 | 0.945 | 66.5 | 438.5 |
-| 1D-CNN | Air compressor circuit | 0.916 | 0.896 | 0.826 | 0.740 | 306.5 | 895.4 |
-| 1D-CNN | Furnace and air handler | 0.889 | 0.875 | 0.799 | 0.605 | 159.5 | 614.3 |
-| 1D-CNN | Electric clothes dryer | 0.982 | 0.892 | 0.843 | 0.950 | 58.5 | 413.3 |
+| MLP | Air compressor circuit | 0.909 | 0.887 | 0.814 | 0.730 | 326.9 | 948.7 |
+| MLP | Furnace and air handler | 0.897 | 0.863 | 0.805 | 0.655 | 162.3 | 578.5 |
+| MLP | Electric clothes dryer | 0.974 | 0.805 | 0.773 | 0.925 | 51.3 | 382.4 |
+| 1D-CNN | Air compressor circuit | 0.912 | 0.877 | 0.816 | 0.820 | 288.4 | 832.1 |
+| 1D-CNN | Furnace and air handler | 0.894 | 0.831 | 0.790 | 0.760 | 159.6 | 597.7 |
+| 1D-CNN | Electric clothes dryer | 0.978 | 0.857 | 0.812 | 0.950 | 83.5 | 603.1 |
 
 ### Assignment benchmarks
 
@@ -122,7 +122,7 @@ has no fixed assignment target.
 | Model | Appliance | Accuracy >=85% | Balanced accuracy >=75% | Macro-F1 >=0.70 |
 |---|---|---:|---:|---:|
 | 1D-CNN | Air compressor circuit | PASS | PASS | FAIL |
-| 1D-CNN | Furnace and air handler | FAIL | FAIL | FAIL |
+| 1D-CNN | Furnace and air handler | FAIL | FAIL | PASS |
 | 1D-CNN | Electric clothes dryer | PASS | PASS | PASS |
 | MLP | Air compressor circuit | PASS | PASS | FAIL |
 | MLP | Furnace and air handler | FAIL | FAIL | FAIL |
@@ -147,7 +147,7 @@ has no fixed assignment target.
 
 ## Comparison and conclusion
 
-By average macro-F1 across appliances, 1D-CNN leads the chronological test (0.734), while 1D-CNN leads the unseen-home test (0.823). Individual appliance results vary; compare the tables and error plots for status recognition and power estimation separately.
+By average macro-F1 across appliances, 1D-CNN leads the chronological test (0.760), while 1D-CNN leads the unseen-home test (0.806). Individual appliance results vary; compare the tables and error plots for status recognition and power estimation separately.
 
 Models meeting all appliance minimums: chronological test: none; unseen-home test: 1D-CNN, MLP.
 

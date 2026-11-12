@@ -18,7 +18,7 @@
     661
   ],
   "test_home": 7951,
-  "window_minutes": 60,
+  "window_minutes": 120,
   "train_stride": 20,
   "max_epochs": 20,
   "early_stopping_patience": 5,
@@ -38,111 +38,111 @@
   },
   "status_probability_thresholds": {
     "MLP": {
-      "air1": 0.775,
-      "furnace1": 0.66,
-      "drye1": 0.945
+      "air1": 0.73,
+      "furnace1": 0.655,
+      "drye1": 0.925
     },
     "1D-CNN": {
-      "air1": 0.74,
-      "furnace1": 0.605,
+      "air1": 0.82,
+      "furnace1": 0.76,
       "drye1": 0.95
     }
   },
   "validation_threshold_metrics": {
     "MLP": {
       "Air compressor circuit": {
-        "probability_threshold": 0.7749999999999999,
-        "macro_f1": 0.9042227685867467,
-        "balanced_accuracy": 0.9128740078133644
+        "probability_threshold": 0.73,
+        "macro_f1": 0.9060726139427298,
+        "balanced_accuracy": 0.9146869022180153
       },
       "Furnace and air handler": {
-        "probability_threshold": 0.6599999999999999,
-        "macro_f1": 0.8326366880542366,
-        "balanced_accuracy": 0.8251539801483506
+        "probability_threshold": 0.6549999999999999,
+        "macro_f1": 0.8335800710810537,
+        "balanced_accuracy": 0.8211902304761718
       },
       "Electric clothes dryer": {
-        "probability_threshold": 0.945,
-        "macro_f1": 0.846549181061045,
-        "balanced_accuracy": 0.8418846137075312
+        "probability_threshold": 0.9249999999999999,
+        "macro_f1": 0.8414458539703502,
+        "balanced_accuracy": 0.8297947445634851
       }
     },
     "1D-CNN": {
       "Air compressor circuit": {
-        "probability_threshold": 0.74,
-        "macro_f1": 0.9140252368589568,
-        "balanced_accuracy": 0.9202843806530101
+        "probability_threshold": 0.82,
+        "macro_f1": 0.9280303559745651,
+        "balanced_accuracy": 0.9315138997495414
       },
       "Furnace and air handler": {
-        "probability_threshold": 0.605,
-        "macro_f1": 0.8594012405293543,
-        "balanced_accuracy": 0.8610958924494205
+        "probability_threshold": 0.7599999999999999,
+        "macro_f1": 0.8754606233042679,
+        "balanced_accuracy": 0.87221557528089
       },
       "Electric clothes dryer": {
         "probability_threshold": 0.95,
-        "macro_f1": 0.8702831093460028,
-        "balanced_accuracy": 0.8758023725113279
+        "macro_f1": 0.8660306700152467,
+        "balanced_accuracy": 0.8713103737917467
       }
     }
   },
-  "train_windows": 252686,
-  "validation_windows": 54082,
-  "chronological_test_windows": 1057080,
-  "unseen_test_windows": 525541,
+  "train_windows": 252564,
+  "validation_windows": 53987,
+  "chronological_test_windows": 1046466,
+  "unseen_test_windows": 525481,
   "status_counts": {
     "train": {
       "Air compressor circuit": {
-        "on": 61130,
-        "off": 191556
+        "on": 61111,
+        "off": 191453
       },
       "Furnace and air handler": {
-        "on": 92934,
-        "off": 159752
+        "on": 92877,
+        "off": 159687
       },
       "Electric clothes dryer": {
-        "on": 5241,
-        "off": 247445
+        "on": 5238,
+        "off": 247326
       }
     },
     "validation": {
       "Air compressor circuit": {
-        "on": 10667,
-        "off": 43415
+        "on": 10627,
+        "off": 43360
       },
       "Furnace and air handler": {
-        "on": 15238,
-        "off": 38844
+        "on": 15193,
+        "off": 38794
       },
       "Electric clothes dryer": {
         "on": 1020,
-        "off": 53062
+        "off": 52967
       }
     },
     "chronological_test": {
       "Air compressor circuit": {
-        "on": 13690,
-        "off": 1043390
+        "on": 13597,
+        "off": 1032869
       },
       "Furnace and air handler": {
-        "on": 212258,
-        "off": 844822
+        "on": 210697,
+        "off": 835769
       },
       "Electric clothes dryer": {
-        "on": 21398,
-        "off": 1035682
+        "on": 21194,
+        "off": 1025272
       }
     },
     "unseen_test": {
       "Air compressor circuit": {
         "on": 59716,
-        "off": 465825
+        "off": 465765
       },
       "Furnace and air handler": {
-        "on": 67438,
-        "off": 458103
+        "on": 67427,
+        "off": 458054
       },
       "Electric clothes dryer": {
         "on": 13744,
-        "off": 511797
+        "off": 511737
       }
     }
   }
