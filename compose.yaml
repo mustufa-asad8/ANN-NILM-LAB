@@ -8,18 +8,10 @@ services:
       - "8501:8501"
     volumes:
       - type: bind
-        source: ./outputs
-        target: /app/outputs
+        source: ./artifacts
+        target: /app/artifacts
       - type: bind
-        source: ./1minute_data_austin
-        target: /app/1minute_data_austin
-        read_only: true
-      - type: bind
-        source: ./1minute_data_california
-        target: /app/1minute_data_california
-        read_only: true
-      - type: bind
-        source: ./1minute_data_newyork
-        target: /app/1minute_data_newyork
+        source: ./data/raw
+        target: /app/data/raw
         read_only: true
     restart: unless-stopped

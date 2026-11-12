@@ -153,15 +153,15 @@ Models meeting all appliance minimums: chronological test: none; unseen-home tes
 
 ## Figures and training log
 
-- `outputs/chronological_test_confusion_matrices.png`
-- `outputs/chronological_test_power_predictions.png`
-- `outputs/unseen_home_confusion_matrices.png`
-- `outputs/unseen_home_power_predictions.png`
-- `outputs/training_log.csv`
+- `artifacts/figures/chronological_test_confusion_matrices.png`
+- `artifacts/figures/chronological_test_power_predictions.png`
+- `artifacts/figures/unseen_home_confusion_matrices.png`
+- `artifacts/figures/unseen_home_power_predictions.png`
+- `artifacts/logs/training_log.csv`
 
 ## Reproducibility and limitations
 
-Run `python nilm_ccp.py --region austin`. The selected cohort and settings can
+Run `python src/nilm_ccp/train.py --region austin`. The selected cohort and settings can
 be overridden from the command line. The chronological test measures later-time
 performance on the development homes; the unseen-home test measures transfer to
 one unseen home, not all Pecan Street homes. `grid` is the available whole-home

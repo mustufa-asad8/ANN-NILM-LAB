@@ -1,166 +1,168 @@
-# ANN-Based NILM CCP
+# ANN-Based NILM
 
-This project trains and compares a multi-task MLP and 1D-CNN for Non-Intrusive
-Load Monitoring (NILM). Both models use only the household whole-home `grid`
-meter history to estimate `air1`, `furnace1`, and `drye1`
-ON/OFF states and power. The appliance channels are targets only; they are
-never model inputs.
+An ANN-based Non-Intrusive Load Monitoring (NILM) project for the CT-466
+Artificial Neural Networks course. It trains and compares a multi-task MLP and
+1D-CNN using only whole-home `grid` power to predict the ON/OFF state and power
+of `air1`, `furnace1`, and `drye1`.
 
-## Dataset
+Appliance channels are targets only; they are never model inputs. Source
+readings are in kW. The committed Austin evaluation holds out home `7951` from
+all training and validation. Its MLP and 1D-CNN results meet the CCP minimum
+accuracy, balanced-accuracy, and macro-F1 benchmarks for all three appliances.
 
-The supplied workspace includes New York, California, and Austin 1-minute CSV
-files and Pecan Street metadata. The default experiment uses Austin because it
-contains a larger cohort with complete readings for the selected circuits:
+## Project layout
 
-`1minute_data_austin/1minute_data_austin.csv`
+```text
+data/
+  raw/
+    austin/       readings_1min.csv, metadata.csv
+    california/   readings_1min.csv, metadata.csv
+    new_york/     readings_1min.csv, metadata.csv
+    puerto_rico/  monthly measurement files and metadata
+src/
+  nilm_ccp/
+    dashboard.py
+    train.py
+app.py                 Streamlit Cloud entrypoint
+tests/
+  test_training.py
+artifacts/
+  checkpoints/
+  figures/
+  logs/
+  metadata/
+  metrics/
+  reports/
+```
 
-The default cohort contains 15 homes: `7951`, `8565`, `2361`, `6139`, `7536`,
-`8156`, `9019`, `4767`, `3456`, `7901`, `4373`, `2335`, `9922`, `9278`, and
-`661`. Home `7951` is reserved for unseen-home testing; the other 14 homes
-provide a more diverse training and validation cohort. The target circuit
-channels are `air1` (air compressor circuit),
-`furnace1` (furnace and air handler), and `drye1` (electric clothes dryer);
-all selected homes have aligned readings and ON/OFF examples for each channel.
-Each of the development homes is split chronologically into 70% training, 15%
-validation, and 15% test. Adjacent windows never cross split or missing-data
-boundaries.
+Regional source data is kept out of the application package and is not copied
+into the Docker image. See [data/README.md](data/README.md) for the supplied
+file formats and expected locations.
 
-All source power readings are in kW. For each appliance, the ON threshold is
-computed from positive training-part readings as the larger of 50 W and their
-10th percentile. Thresholds, input normalization, and positive-class weights
-are fit from training data only.
+## Requirements and setup
 
-## Run
-
-Install the requirements if needed:
+Python 3.10 or newer is recommended. From PowerShell:
 
 ```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
 python -m pip install -r requirements-training.txt
 ```
 
-Launch the graphical dashboard:
+`requirements.txt` installs the dashboard and data-analysis dependencies.
+`requirements-training.txt` includes those dependencies and PyTorch.
+
+Run the focused regression tests with:
 
 ```powershell
-streamlit run app.py
+python -m unittest discover -s tests -v
 ```
 
-In the sidebar, choose the dataset, homes, held-out home, and training settings.
-Click **Train MLP and 1D-CNN** to run both models; the dashboard displays live
-training output, metrics with target PASS/FAIL checks, confusion matrices, power
-plots, and a downloadable report or complete submission bundle.
+## Run the dashboard
 
-When a region or CSV path changes, the dashboard scans that file for homes with
-at least 10,000 complete `grid`/target readings and at least 100 ON and 100 OFF
-examples for each target circuit (using 50 W as the eligibility boundary). It
-then randomly selects up to 15 eligible homes and one of those homes for the
-unseen-home test. Use **Randomize home IDs** to draw another cohort, or adjust
-the cohort-size slider to select a different number. Home IDs can also be edited
-manually, but training is disabled if the selected cohort contains an ineligible
-home or the unseen-test home is not in that cohort. Regions with fewer than five
-eligible homes are reported as unavailable for this experiment rather than
-filled with unsuitable homes.
+```powershell
+streamlit run src\nilm_ccp\dashboard.py
+```
 
-With the supplied files and these criteria, the current scan finds 15 eligible
-Austin homes, four in New York, and none in California. Austin is therefore the
-only supplied region that currently meets the five-home minimum for this
-three-circuit experiment; the counts are recalculated when the source CSV
-changes.
+The deployed Streamlit Community Cloud app uses the root `app.py` entrypoint
+and reads its committed Austin evaluation artifacts. The app is available at
+[ann-nilm-lab-ct466.streamlit.app](https://ann-nilm-lab-ct466.streamlit.app/).
+To connect a new deployment, select this GitHub repository, branch `main`, and
+main file path `app.py`.
 
-## Public dashboard
+Choose a supported region, eligible homes, a held-out home, and training
+settings in the sidebar. The dashboard scans the selected CSV for complete
+`grid`/target records and homes with ON and OFF examples. It randomly selects
+up to 15 eligible homes by default; the unseen-home test uses one complete
+selected home that is excluded from fitting and calibration.
 
-The public Streamlit deployment displays the committed Austin evaluation
-results, report, and charts. The multi-gigabyte regional CSVs are intentionally
-not hosted with the app, so starting new training runs is available only in a
-local or Docker setup where the dataset files are present. The base
-`requirements.txt` contains the dashboard dependencies; PyTorch is kept in
-`requirements-training.txt` so the public read-only view does not download the
-large training framework.
+The wide CSV datasets supported by the experiment are Austin, California, and
+New York. The supplied Puerto Rico data is organized as monthly measurement
+files rather than the wide household CSV format, so it is preserved under
+`data/raw/puerto_rico` but is not currently selectable by the experiment.
+
+## Train and evaluate
+
+The default CLI run uses the committed 15-home Austin cohort, a 120-minute
+input window, 20 training epochs maximum, batch size 512, early-stopping
+patience 5, training stride 20, and seed 466:
+
+```powershell
+python src\nilm_ccp\train.py --region austin
+```
+
+Regenerate metrics, figures, and the report without retraining:
+
+```powershell
+python src\nilm_ccp\train.py --region austin --evaluate-only
+```
+
+Evaluation-only mode requires the saved cohort and training settings to match,
+and checks that the checkpoint normalization and ON thresholds match the
+current training data. To use a different region, CSV, cohort, or training
+configuration, omit `--evaluate-only` and train new checkpoints. For example:
+
+```powershell
+python src\nilm_ccp\train.py --region austin --epochs 15
+python src\nilm_ccp\train.py --csv "C:\data\readings.csv" --home-ids 558 3488 950 1417 5587 --test-home 5587
+```
+
+Each selected home must provide a whole-home `grid` channel and all three
+appliance channels. The pipeline averages duplicate timestamps, removes
+incomplete readings, splits at missing-minute gaps, and creates windows only
+within a split. The chronological split is 70% training, 15% validation, and
+15% test for each development home. At least one other complete home is
+reserved for unseen-home testing. Thresholds, input normalization, class
+weights, and status cutoffs are fit using training or validation data only;
+the test labels are not used for calibration.
+
+## CCP evaluation
+
+The required held-out classification benchmarks are accuracy >= 0.85,
+balanced accuracy >= 0.75, and macro-F1 >= 0.70 for each of three appliances.
+The excellent targets are 0.90, 0.85, and 0.80. Power MAE/RMSE are reported
+but have no fixed benchmark. The report includes per-appliance class counts,
+confusion matrices, actual-versus-predicted power plots, model comparison,
+data-cleaning details, assumptions, and limitations.
+
+## Artifacts
+
+Training and the dashboard update the following versioned deliverables under
+`artifacts/`:
+
+- `metrics/metrics.csv`: chronological and unseen-home metrics.
+- `reports/report.md`: methodology, comparison, and benchmark checks.
+- `figures/`: confusion matrices and power prediction plots.
+- `logs/training_log.csv`: training and validation metrics by epoch.
+- `metadata/run_metadata.json`: cohort, thresholds, split sizes, versions, and
+  seed.
+- `checkpoints/`: validation-selected MLP and 1D-CNN model checkpoints.
+- `nilm_ccp_submission.zip`: submission bundle available from the
+  dashboard.
+
+The dashboard also offers downloads for the report, metrics, and complete
+submission bundle.
 
 ## Docker Compose
 
-Build the image and start the dashboard from the project directory:
+From the project directory:
 
 ```powershell
 docker compose up --build -d
 ```
 
-Open [http://localhost:8501](http://localhost:8501). Check startup and training
-logs with:
+Open [http://localhost:8501](http://localhost:8501). The source data is mounted
+read-only from `data/raw`; generated artifacts persist in the local
+`artifacts/` directory. Inspect logs and stop the app with:
 
 ```powershell
 docker compose logs -f
-```
-
-Stop and remove the container and Compose network with:
-
-```powershell
 docker compose down
 ```
 
-The regional dataset folders are mounted read-only into the container. Generated
-reports, metrics, charts, and model checkpoints are stored in the local
-`outputs/` folder and remain available after the container is stopped or
-removed. The image build deliberately excludes the large CSV datasets; keep the
-dataset folders beside `compose.yaml`.
-
-Train both networks and create the report/figures using the expanded Austin
-cohort:
-
-```powershell
-python nilm_ccp.py --region austin
-```
-
-After training, regenerate metrics and figures from the saved model checkpoints
-without retraining:
-
-```powershell
-python nilm_ccp.py --region austin --evaluate-only
-```
-
-Use another region, dataset path, home cohort, or training duration with
-arguments, for example:
-
-```powershell
-python nilm_ccp.py --region austin --epochs 15
-python nilm_ccp.py --csv "path\to\your.csv" --home-ids 558 3488 950 1417 5587 --test-home 5587
-```
-
-Every selected home must have the `grid` channel and all three appliance
-channels. The script validates this through actual non-missing, contiguous
-minute readings and fails with an explicit error if a required home or usable
-split is absent.
-
-## Outputs
-
-The `outputs/` directory contains:
-
-- `metrics.csv`: accuracy, balanced accuracy, macro-F1, MAE, and RMSE for both
-  chronological and unseen-home test sets.
-- `REPORT.md`: methodology and the measured comparison table.
-- `chronological_test_confusion_matrices.png` and `unseen_home_confusion_matrices.png`:
-  per-model, per-appliance ON/OFF confusion matrices.
-- `chronological_test_power_predictions.png` and `unseen_home_power_predictions.png`:
-  actual and estimated power for the first 24 test hours.
-- `training_log.csv`: train and validation losses for every epoch.
-- `run_metadata.json`: cohort, thresholds, split sizes, versions, and seed.
-- `mlp_best.pt` and `1d_cnn_best.pt`: checkpoints selected by validation
-  macro-F1, with balanced accuracy as a tie-breaker.
-
-For status predictions, each model/appliance probability cutoff is selected
-from the pooled validation split by searching 0.05 to 0.95 in increments of
-0.005, maximizing macro-F1, with balanced accuracy as a tie-breaker. The
-selected cutoff is frozen before either test set is evaluated; the held-out
-home's labels are not used for calibration. Benchmarks
-from the CCP are accuracy >=85%, balanced accuracy >=75%, and macro-F1 >=0.70;
-excellent targets are >=90%, >=85%, and >=0.80. Power MAE and RMSE should also
-be reported but have no fixed benchmark.
-
 ## Notes
 
-The `grid` channel is the supplied whole-home net-meter reading. Because it may
-be negative while a home exports solar power, it is not identical to gross
-household consumption. This is documented in the generated report. The chosen
-home IDs have full appliance-channel coverage and enough ON/OFF examples in the
-provided Austin CSV; the script calculates and reports the final thresholded
-test-class counts for each run.
+The supplied `grid` channel is whole-home net-meter power, not gross household
+consumption; it can be negative when solar generation exceeds demand. Metrics
+and conclusions should be interpreted with this limitation in mind.

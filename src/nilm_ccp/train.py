@@ -31,15 +31,13 @@ from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 REGION_FILES = {
-    "newyork": Path("1minute_data_newyork") / "1minute_data_newyork.csv",
-    "california": Path("1minute_data_california")
-    / "1minute_data_california"
-    / "1minute_data_california.csv",
-    "austin": Path("1minute_data_austin")
-    / "1minute_data_austin"
-    / "1minute_data_austin.csv",
+    "newyork": PROJECT_ROOT / "data" / "raw" / "new_york" / "readings_1min.csv",
+    "california": PROJECT_ROOT / "data" / "raw" / "california" / "readings_1min.csv",
+    "austin": PROJECT_ROOT / "data" / "raw" / "austin" / "readings_1min.csv",
 }
+CHECKPOINT_FILES = {"MLP": "mlp_best.pt", "1D-CNN": "cnn_1d_best.pt"}
 APPLIANCES = ("air1", "furnace1", "drye1")
 APPLIANCE_NAMES = {
     "air1": "Air compressor circuit",
@@ -139,19 +137,90 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_TEST_HOME,
         help="One complete home reserved for unseen-home testing.",
     )
-    parser.add_argument("--window", type=int, default=60, help="Input history in minutes.")
+    parser.add_argument("--window", type=int, default=120, help="Input history in minutes.")
     parser.add_argument("--epochs", type=int, default=20)
     parser.add_argument("--batch-size", type=int, default=512)
     parser.add_argument("--patience", type=int, default=5)
     parser.add_argument("--train-stride", type=int, default=20)
     parser.add_argument("--seed", type=int, default=466)
-    parser.add_argument("--output-dir", type=Path, default=Path("outputs"))
+    parser.add_argument("--output-dir", type=Path, default=PROJECT_ROOT / "artifacts")
     parser.add_argument(
         "--evaluate-only",
         action="store_true",
         help="Re-evaluate existing checkpoints without training them again.",
     )
     return parser.parse_args()
+
+
+def validate_evaluation_setup(args: argparse.Namespace) -> None:
+    metadata_path = args.output_dir / "metadata" / "run_metadata.json"
+    if not metadata_path.is_file():
+        raise FileNotFoundError(
+            f"Cannot evaluate checkpoints without the original run metadata: {metadata_path}"
+        )
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    if not isinstance(metadata, dict):
+        raise ValueError(f"Run metadata must contain a JSON object: {metadata_path}")
+
+    requested = {
+        "region": args.region,
+        "home_ids": args.home_ids,
+        "test_home": args.test_home,
+        "window_minutes": args.window,
+        "train_stride": args.train_stride,
+        "max_epochs": args.epochs,
+        "early_stopping_patience": args.patience,
+        "batch_size": args.batch_size,
+        "seed": args.seed,
+    }
+    mismatches = [
+        f"{key}: saved={metadata.get(key)!r}, requested={value!r}"
+        for key, value in requested.items()
+        if metadata.get(key) != value
+    ]
+    if mismatches:
+        raise ValueError(
+            "--evaluate-only requires the original training configuration. "
+            "Use the saved run settings or train new checkpoints. Mismatches: "
+            + "; ".join(mismatches)
+        )
+
+
+def validate_checkpoint_preprocessing(
+    checkpoint: dict[str, Any],
+    input_mean: float,
+    input_std: float,
+    thresholds: dict[str, float],
+    model_name: str,
+) -> None:
+    stored_mean = checkpoint.get("input_mean_kw")
+    stored_std = checkpoint.get("input_std_kw")
+    if (
+        stored_mean is None
+        or stored_std is None
+        or not np.isclose(float(stored_mean), input_mean, rtol=1e-6, atol=1e-8)
+        or not np.isclose(float(stored_std), input_std, rtol=1e-6, atol=1e-8)
+    ):
+        raise ValueError(
+            f"{model_name} checkpoint preprocessing does not match the selected "
+            "training data; refusing to report incompatible evaluation metrics."
+        )
+
+    stored_thresholds = checkpoint.get("on_thresholds_kw")
+    if not isinstance(stored_thresholds, dict) or any(
+        appliance not in stored_thresholds
+        or not np.isclose(
+            float(stored_thresholds[appliance]),
+            thresholds[appliance],
+            rtol=1e-6,
+            atol=1e-8,
+        )
+        for appliance in APPLIANCES
+    ):
+        raise ValueError(
+            f"{model_name} checkpoint ON thresholds do not match the selected "
+            "training data; refusing to report incompatible evaluation metrics."
+        )
 
 
 def seed_everything(seed: int) -> None:
@@ -499,7 +568,7 @@ def train_model(
             "appliances": list(APPLIANCES),
             "on_thresholds_kw": thresholds,
         },
-        output_dir / f"{name.lower().replace('-', '_')}_best.pt",
+        output_dir / "checkpoints" / CHECKPOINT_FILES[name],
     )
     return model, log
 
@@ -597,7 +666,9 @@ def save_plots(
             )
             figure.colorbar(image, ax=axis, fraction=0.046)
     figure.tight_layout()
-    figure.savefig(output_dir / f"{test_group}_confusion_matrices.png", dpi=160)
+    figure.savefig(
+        output_dir / "figures" / f"{test_group}_confusion_matrices.png", dpi=160
+    )
     plt.close(figure)
 
     figure, axes = plt.subplots(len(APPLIANCES), 1, figsize=(15, 9), sharex=True)
@@ -625,7 +696,9 @@ def save_plots(
         axis.grid(alpha=0.2)
     axes[-1].set_xlabel(f"Minutes in {test_group.replace('_', ' ')} sequence")
     figure.tight_layout()
-    figure.savefig(output_dir / f"{test_group}_power_predictions.png", dpi=160)
+    figure.savefig(
+        output_dir / "figures" / f"{test_group}_power_predictions.png", dpi=160
+    )
     plt.close(figure)
 
 
@@ -873,15 +946,15 @@ has no fixed assignment target.
 
 ## Figures and training log
 
-- `outputs/chronological_test_confusion_matrices.png`
-- `outputs/chronological_test_power_predictions.png`
-- `outputs/unseen_home_confusion_matrices.png`
-- `outputs/unseen_home_power_predictions.png`
-- `outputs/training_log.csv`
+- `artifacts/figures/chronological_test_confusion_matrices.png`
+- `artifacts/figures/chronological_test_power_predictions.png`
+- `artifacts/figures/unseen_home_confusion_matrices.png`
+- `artifacts/figures/unseen_home_power_predictions.png`
+- `artifacts/logs/training_log.csv`
 
 ## Reproducibility and limitations
 
-Run `python nilm_ccp.py --region austin`. The selected cohort and settings can
+Run `python src/nilm_ccp/train.py --region austin`. The selected cohort and settings can
 be overridden from the command line. The chronological test measures later-time
 performance on the development homes; the unseen-home test measures transfer to
 one unseen home, not all Pecan Street homes. `grid` is the available whole-home
@@ -889,7 +962,7 @@ net-meter reading; it can be negative when a home exports solar power, so the
 input is net grid power rather than gross appliance-sum consumption. This
 distinction should be included when discussing limitations.
 """
-    (output_dir / "REPORT.md").write_text(text, encoding="utf-8")
+    (output_dir / "reports" / "report.md").write_text(text, encoding="utf-8")
 
 
 def main() -> None:
@@ -902,6 +975,8 @@ def main() -> None:
         raise ValueError("--test-home must be included in --home-ids.")
     if args.window < 2 or args.train_stride < 1:
         raise ValueError("Window size must be >= 2 and train stride must be >= 1.")
+    if args.evaluate_only:
+        validate_evaluation_setup(args)
 
     seed_everything(args.seed)
     torch.set_num_threads(max(1, min(4, torch.get_num_threads())))
@@ -964,7 +1039,8 @@ def main() -> None:
     ):
         raise RuntimeError("The held-out test data contains an unexpected home.")
 
-    args.output_dir.mkdir(parents=True, exist_ok=True)
+    for directory in ("checkpoints", "figures", "logs", "metadata", "metrics", "reports"):
+        (args.output_dir / directory).mkdir(parents=True, exist_ok=True)
     all_results: list[dict[str, Any]] = []
     predictions: dict[str, dict[str, tuple[np.ndarray, np.ndarray]]] = {
         "chronological_test": {},
@@ -974,7 +1050,7 @@ def main() -> None:
     validation_threshold_metrics: dict[str, dict[str, dict[str, float]]] = {}
     log_rows: list[dict[str, Any]] = []
     for name in ("MLP", "1D-CNN"):
-        checkpoint_path = args.output_dir / f"{name.lower().replace('-', '_')}_best.pt"
+        checkpoint_path = args.output_dir / "checkpoints" / CHECKPOINT_FILES[name]
         if args.evaluate_only:
             if not checkpoint_path.is_file():
                 raise FileNotFoundError(
@@ -983,9 +1059,16 @@ def main() -> None:
             checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
             if checkpoint.get("model") != name or checkpoint.get("window_size") != args.window:
                 raise ValueError(f"Checkpoint does not match the requested {name} setup.")
+            validate_checkpoint_preprocessing(
+                checkpoint,
+                input_mean,
+                input_std,
+                thresholds,
+                name,
+            )
             model = build_model(name, args.window).to(device)
             model.load_state_dict(checkpoint["state_dict"])
-            log_path = args.output_dir / "training_log.csv"
+            log_path = args.output_dir / "logs" / "training_log.csv"
             if not log_path.is_file():
                 raise FileNotFoundError(f"Training log not found: {log_path}")
             log_frame = pd.read_csv(log_path)
@@ -1077,8 +1160,8 @@ def main() -> None:
         )
 
     results_frame = pd.DataFrame(all_results)
-    results_frame.to_csv(args.output_dir / "metrics.csv", index=False)
-    pd.DataFrame(log_rows).to_csv(args.output_dir / "training_log.csv", index=False)
+    results_frame.to_csv(args.output_dir / "metrics" / "metrics.csv", index=False)
+    pd.DataFrame(log_rows).to_csv(args.output_dir / "logs" / "training_log.csv", index=False)
     for test_group, test_data in (
         ("chronological_test", chronological_test_data),
         ("unseen_home", unseen_test_data),
@@ -1132,7 +1215,7 @@ def main() -> None:
             )
         },
     }
-    (args.output_dir / "run_metadata.json").write_text(
+    (args.output_dir / "metadata" / "run_metadata.json").write_text(
         json.dumps(metadata, indent=2), encoding="utf-8"
     )
     write_report(

@@ -1,14 +1,11 @@
-# Supplied regional datasets are large and must be provided locally.
-1minute_data_austin/
-1minute_data_california/
-1minute_data_newyork/
-pr_1min/
+# Source datasets are large and must be provided locally.
+data/raw/
 
-# Local tooling and generated submission archive.
+# Local tooling and generated Python cache.
 .vscode/
 __pycache__/
 *.py[cod]
-outputs/ANN_CCP_NILM_submission.zip
+artifacts/nilm_ccp_submission.zip
 
 # Local environments and logs.
 .venv/

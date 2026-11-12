@@ -7,16 +7,17 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-COPY requirements.txt requirements-training.txt app.py nilm_ccp.py README.md ./
+COPY requirements.txt requirements-training.txt README.md ./
+COPY src/ src/
 COPY .streamlit/ .streamlit/
 
 RUN python -m pip install --no-cache-dir --upgrade pip \
     && python -m pip install --no-cache-dir -r requirements-training.txt \
-    && mkdir -p /app/outputs
+    && mkdir -p /app/artifacts
 
 EXPOSE 8501
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8501/_stcore/health', timeout=3).read()"
 
-CMD ["streamlit", "run", "app.py", "--server.address=0.0.0.0", "--server.port=8501"]
+CMD ["streamlit", "run", "src/nilm_ccp/dashboard.py", "--server.address=0.0.0.0", "--server.port=8501"]

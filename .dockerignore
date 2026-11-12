@@ -7,8 +7,6 @@ __pycache__
 .mypy_cache
 .ruff_cache
 .vscode
-outputs
-1minute_data_austin
-1minute_data_california
-1minute_data_newyork
-pr_1min
+artifacts
+data/raw
+tests
