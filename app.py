@@ -194,6 +194,7 @@ def build_submission_bundle() -> bytes:
         ROOT / "app.py",
         ROOT / "README.md",
         ROOT / "requirements.txt",
+        ROOT / "requirements-training.txt",
         ROOT / ".streamlit" / "config.toml",
         OUTPUT_DIR / "REPORT.md",
         OUTPUT_DIR / "metrics.csv",

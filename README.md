@@ -36,6 +36,7 @@ Install the requirements if needed:
 
 ```powershell
 python -m pip install -r requirements.txt
+python -m pip install -r requirements-training.txt
 ```
 
 Launch the graphical dashboard:
@@ -65,6 +66,16 @@ Austin homes, four in New York, and none in California. Austin is therefore the
 only supplied region that currently meets the five-home minimum for this
 three-circuit experiment; the counts are recalculated when the source CSV
 changes.
+
+## Public dashboard
+
+The public Streamlit deployment displays the committed Austin evaluation
+results, report, and charts. The multi-gigabyte regional CSVs are intentionally
+not hosted with the app, so starting new training runs is available only in a
+local or Docker setup where the dataset files are present. The base
+`requirements.txt` contains the dashboard dependencies; PyTorch is kept in
+`requirements-training.txt` so the public read-only view does not download the
+large training framework.
 
 ## Docker Compose
 

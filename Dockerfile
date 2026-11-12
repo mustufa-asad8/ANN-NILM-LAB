@@ -7,11 +7,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-COPY requirements.txt app.py nilm_ccp.py README.md ./
+COPY requirements.txt requirements-training.txt app.py nilm_ccp.py README.md ./
 COPY .streamlit/ .streamlit/
 
 RUN python -m pip install --no-cache-dir --upgrade pip \
-    && python -m pip install --no-cache-dir -r requirements.txt \
+    && python -m pip install --no-cache-dir -r requirements-training.txt \
     && mkdir -p /app/outputs
 
 EXPOSE 8501
