@@ -28,6 +28,17 @@ REGION_FILES = {
     "California": ROOT / "data" / "raw" / "california" / "readings_1min.csv",
     "Austin": ROOT / "data" / "raw" / "austin" / "readings_1min.csv",
 }
+LEGACY_REGION_FILES = {
+    "New York": ROOT / "1minute_data_newyork" / "1minute_data_newyork.csv",
+    "California": ROOT
+    / "1minute_data_california"
+    / "1minute_data_california"
+    / "1minute_data_california.csv",
+    "Austin": ROOT
+    / "1minute_data_austin"
+    / "1minute_data_austin"
+    / "1minute_data_austin.csv",
+}
 REGION_KEYS = {"New York": "newyork", "California": "california", "Austin": "austin"}
 REQUIRED_SIGNAL_COLUMNS = ("grid", "air1", "furnace1", "drye1")
 MIN_COMPLETE_READINGS = 10_000
@@ -466,10 +477,18 @@ def main() -> None:
             index=2,
             key="dataset_region",
         )
+        dataset_path_key = f"dataset_path_{REGION_KEYS[region_name]}"
+        saved_dataset_path = st.session_state.get(dataset_path_key)
+        if (
+            saved_dataset_path is not None
+            and Path(str(saved_dataset_path)).expanduser().resolve()
+            == LEGACY_REGION_FILES[region_name].resolve()
+        ):
+            st.session_state[dataset_path_key] = str(REGION_FILES[region_name])
         dataset_path = st.text_input(
             "CSV file path",
             value=str(REGION_FILES[region_name]),
-            key=f"dataset_path_{REGION_KEYS[region_name]}",
+            key=dataset_path_key,
         )
         selected_file = Path(dataset_path).expanduser()
         file_exists = selected_file.is_file()
