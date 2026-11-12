@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import json
 import queue
+import random
 import re
 import subprocess
 import sys
@@ -14,6 +15,7 @@ import zipfile
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 import streamlit as st
 
@@ -33,26 +35,10 @@ REGION_FILES = {
     / "1minute_data_austin.csv",
 }
 REGION_KEYS = {"New York": "newyork", "California": "california", "Austin": "austin"}
-DEFAULT_HOMES = ", ".join(
-    str(home)
-    for home in (
-        7951,
-        8565,
-        2361,
-        6139,
-        7536,
-        8156,
-        9019,
-        4767,
-        3456,
-        7901,
-        4373,
-        2335,
-        9922,
-        9278,
-        661,
-    )
-)
+REQUIRED_SIGNAL_COLUMNS = ("grid", "air1", "furnace1", "drye1")
+MIN_COMPLETE_READINGS = 10_000
+MIN_CLASS_READINGS = 100
+MAX_DEFAULT_HOMES = 15
 PLOT_FILES = {
     "chronological_test": (
         "chronological_test_confusion_matrices.png",
@@ -122,6 +108,72 @@ def parse_home_ids(value: str) -> list[int]:
     if len(set(homes)) != len(homes):
         raise ValueError("Home IDs must not repeat.")
     return homes
+
+
+@st.cache_data(show_spinner="Scanning this region for homes with usable readings...")
+def find_eligible_homes(
+    csv_path: str, file_size: int, modified_time_ns: int
+) -> list[int]:
+    del file_size, modified_time_ns
+    columns = ["dataid", *REQUIRED_SIGNAL_COLUMNS]
+    dtypes = {
+        "dataid": "int32",
+        **{column: "float32" for column in REQUIRED_SIGNAL_COLUMNS},
+    }
+    counts: dict[int, list[int]] = {}
+    for chunk in pd.read_csv(
+        csv_path,
+        usecols=columns,
+        dtype=dtypes,
+        chunksize=500_000,
+        low_memory=False,
+    ):
+        usable = chunk.dropna(subset=columns)
+        if usable.empty:
+            continue
+        group_ids, home_ids = pd.factorize(usable["dataid"], sort=False)
+        group_count = len(home_ids)
+        complete_counts = np.bincount(group_ids, minlength=group_count)
+        appliance_counts = []
+        for appliance in ("air1", "furnace1", "drye1"):
+            is_on = usable[appliance].to_numpy() >= 0.05
+            appliance_counts.append(
+                (
+                    np.bincount(
+                        group_ids, weights=is_on, minlength=group_count
+                    ).astype(np.int64),
+                    np.bincount(
+                        group_ids, weights=~is_on, minlength=group_count
+                    ).astype(np.int64),
+                )
+            )
+        for index, home_id in enumerate(home_ids):
+            home_counts = counts.setdefault(int(home_id), [0] * 7)
+            home_counts[0] += int(complete_counts[index])
+            for appliance_index, (on_counts, off_counts) in enumerate(
+                appliance_counts
+            ):
+                home_counts[appliance_index + 1] += int(on_counts[index])
+                home_counts[appliance_index + 4] += int(off_counts[index])
+
+    return sorted(
+        home_id
+        for home_id, home_counts in counts.items()
+        if home_counts[0] >= MIN_COMPLETE_READINGS
+        and all(
+            home_counts[index] >= MIN_CLASS_READINGS
+            for index in range(1, 7)
+        )
+    )
+
+
+def random_home_selection(
+    eligible_homes: list[int], home_count: int
+) -> tuple[list[int], int]:
+    rng = random.SystemRandom()
+    selected = rng.sample(eligible_homes, home_count)
+    test_home = rng.choice(selected)
+    return selected, test_home
 
 
 def load_saved_results() -> tuple[pd.DataFrame | None, dict | None]:
@@ -406,14 +458,103 @@ def main() -> None:
         st.caption("ANN-based non-intrusive load monitoring")
         st.divider()
         st.markdown('<div class="section-label">Experiment setup</div>', unsafe_allow_html=True)
-        region_name = st.selectbox("Dataset region", list(REGION_FILES), index=2)
+        region_name = st.selectbox(
+            "Dataset region",
+            list(REGION_FILES),
+            index=2,
+            key="dataset_region",
+        )
         dataset_path = st.text_input(
             "CSV file path",
             value=str(REGION_FILES[region_name]),
             key=f"dataset_path_{REGION_KEYS[region_name]}",
         )
-        home_text = st.text_input("Home IDs (5 or more)", value=DEFAULT_HOMES)
-        test_home = st.number_input("Unseen test home ID", min_value=1, value=7951, step=1)
+        selected_file = Path(dataset_path).expanduser()
+        file_exists = selected_file.is_file()
+        file_signature = (
+            (selected_file.stat().st_size, selected_file.stat().st_mtime_ns)
+            if file_exists
+            else (0, 0)
+        )
+        selection_token = (
+            REGION_KEYS[region_name],
+            str(selected_file.resolve()),
+            *file_signature,
+        )
+        if st.session_state.get("_home_selection_token") != selection_token:
+            eligible_homes = (
+                find_eligible_homes(
+                    str(selected_file), file_signature[0], file_signature[1]
+                )
+                if file_exists
+                else []
+            )
+            st.session_state["_eligible_homes"] = eligible_homes
+            st.session_state["_home_selection_token"] = selection_token
+            if len(eligible_homes) >= 5:
+                default_count = min(MAX_DEFAULT_HOMES, len(eligible_homes))
+                selected_homes, unseen_home = random_home_selection(
+                    eligible_homes, default_count
+                )
+                st.session_state["home_count"] = default_count
+                st.session_state["_generated_home_count"] = default_count
+                st.session_state["home_ids_input"] = ", ".join(
+                    str(home_id) for home_id in selected_homes
+                )
+                st.session_state["unseen_test_home"] = unseen_home
+            else:
+                st.session_state["home_count"] = 0
+                st.session_state["_generated_home_count"] = 0
+                st.session_state["home_ids_input"] = ""
+                st.session_state["unseen_test_home"] = 1
+
+        eligible_homes = st.session_state.get("_eligible_homes", [])
+        if len(eligible_homes) >= 5:
+            home_count = st.slider(
+                "Homes to select (CCP minimum: 5)",
+                min_value=5,
+                max_value=len(eligible_homes),
+                key="home_count",
+            )
+            if (
+                st.session_state.get("_generated_home_count") != home_count
+            ):
+                selected_homes, unseen_home = random_home_selection(
+                    eligible_homes, home_count
+                )
+                st.session_state["home_ids_input"] = ", ".join(
+                    str(home_id) for home_id in selected_homes
+                )
+                st.session_state["unseen_test_home"] = unseen_home
+                st.session_state["_generated_home_count"] = home_count
+            if st.button("Randomize home IDs"):
+                selected_homes, unseen_home = random_home_selection(
+                    eligible_homes, home_count
+                )
+                st.session_state["home_ids_input"] = ", ".join(
+                    str(home_id) for home_id in selected_homes
+                )
+                st.session_state["unseen_test_home"] = unseen_home
+            st.caption(
+                f"{len(eligible_homes)} homes in this CSV have complete meter and "
+                "target readings with both ON and OFF examples."
+            )
+        else:
+            st.warning(
+                "This region has fewer than five eligible homes for grid, air1, "
+                "furnace1, and drye1. Choose another region or dataset."
+            )
+        home_text = st.text_input(
+            "Home IDs (5 or more)",
+            key="home_ids_input",
+            disabled=len(eligible_homes) < 5,
+        )
+        test_home = st.number_input(
+            "Unseen test home ID",
+            min_value=1,
+            key="unseen_test_home",
+            disabled=len(eligible_homes) < 5,
+        )
         window_size = st.slider("Input history (minutes)", 15, 120, 60, step=15)
         epochs = st.slider("Maximum epochs", 2, 30, 20)
         train_stride = st.select_slider(
@@ -432,8 +573,6 @@ def main() -> None:
             unsafe_allow_html=True,
         )
 
-    selected_file = Path(dataset_path).expanduser()
-    file_exists = selected_file.is_file()
     state_col, region_col, model_col = st.columns(3)
     with state_col:
         st.markdown(
@@ -467,6 +606,12 @@ def main() -> None:
     validation_error = None
     try:
         homes = parse_home_ids(home_text)
+        unavailable_homes = sorted(set(homes) - set(eligible_homes))
+        if unavailable_homes:
+            validation_error = (
+                "These homes do not have sufficient complete readings for the "
+                f"selected target circuits: {unavailable_homes}"
+            )
         if int(test_home) not in homes:
             validation_error = "The unseen test home must be included in the selected home IDs."
     except ValueError as exc:

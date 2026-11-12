@@ -49,6 +49,23 @@ Click **Train MLP and 1D-CNN** to run both models; the dashboard displays live
 training output, metrics with target PASS/FAIL checks, confusion matrices, power
 plots, and a downloadable report or complete submission bundle.
 
+When a region or CSV path changes, the dashboard scans that file for homes with
+at least 10,000 complete `grid`/target readings and at least 100 ON and 100 OFF
+examples for each target circuit (using 50 W as the eligibility boundary). It
+then randomly selects up to 15 eligible homes and one of those homes for the
+unseen-home test. Use **Randomize home IDs** to draw another cohort, or adjust
+the cohort-size slider to select a different number. Home IDs can also be edited
+manually, but training is disabled if the selected cohort contains an ineligible
+home or the unseen-test home is not in that cohort. Regions with fewer than five
+eligible homes are reported as unavailable for this experiment rather than
+filled with unsuitable homes.
+
+With the supplied files and these criteria, the current scan finds 15 eligible
+Austin homes, four in New York, and none in California. Austin is therefore the
+only supplied region that currently meets the five-home minimum for this
+three-circuit experiment; the counts are recalculated when the source CSV
+changes.
+
 ## Docker Compose
 
 Build the image and start the dashboard from the project directory:
