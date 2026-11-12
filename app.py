@@ -541,10 +541,17 @@ def main() -> None:
                 "target readings with both ON and OFF examples."
             )
         else:
-            st.warning(
-                "This region has fewer than five eligible homes for grid, air1, "
-                "furnace1, and drye1. Choose another region or dataset."
-            )
+            if file_exists:
+                st.warning(
+                    "This region has fewer than five eligible homes for grid, air1, "
+                    "furnace1, and drye1. Choose another region or dataset."
+                )
+            else:
+                st.info(
+                    "The regional CSV is not hosted with this public dashboard. "
+                    "Saved evaluation results are available below; run new "
+                    "experiments locally or with Docker and the dataset files."
+                )
         home_text = st.text_input(
             "Home IDs (5 or more)",
             key="home_ids_input",
@@ -578,7 +585,7 @@ def main() -> None:
     with state_col:
         st.markdown(
             f'<div class="mini-card"><div class="label">DATA SOURCE</div>'
-            f'<div class="value">{"Ready" if file_exists else "Missing"}</div>'
+            f'<div class="value">{"Ready" if file_exists else "Not hosted"}</div>'
             f'<div class="label">{selected_file.name}</div></div>',
             unsafe_allow_html=True,
         )
