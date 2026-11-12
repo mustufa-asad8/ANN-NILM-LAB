@@ -611,29 +611,32 @@ def main() -> None:
         "on chronological and unseen-home test data."
     )
     homes: list[int] = []
-    validation_error = None
-    try:
-        homes = parse_home_ids(home_text)
-        unavailable_homes = sorted(set(homes) - set(eligible_homes))
-        if unavailable_homes:
-            validation_error = (
-                "These homes do not have sufficient complete readings for the "
-                f"selected target circuits: {unavailable_homes}"
-            )
-        if int(test_home) not in homes:
-            validation_error = "The unseen test home must be included in the selected home IDs."
-    except ValueError as exc:
-        validation_error = str(exc)
-    if validation_error:
-        st.warning(validation_error)
-    if not file_exists:
-        st.warning("Choose a valid dataset CSV path before starting.")
+    validation_error: str | None = None
+    if file_exists and len(eligible_homes) >= 5:
+        try:
+            homes = parse_home_ids(home_text)
+            unavailable_homes = sorted(set(homes) - set(eligible_homes))
+            if unavailable_homes:
+                validation_error = (
+                    "These homes do not have sufficient complete readings for the "
+                    f"selected target circuits: {unavailable_homes}"
+                )
+            if int(test_home) not in homes:
+                validation_error = (
+                    "The unseen test home must be included in the selected home IDs."
+                )
+        except ValueError as exc:
+            validation_error = str(exc)
+        if validation_error:
+            st.warning(validation_error)
 
     run_clicked = st.button(
         "Train MLP and 1D-CNN",
         type="primary",
         width="stretch",
-        disabled=not file_exists or bool(validation_error),
+        disabled=(
+            not file_exists or len(eligible_homes) < 5 or bool(validation_error)
+        ),
     )
     if run_clicked:
         command = [
