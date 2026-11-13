@@ -1,4 +1,4 @@
-"""Train and evaluate two ANN models for household NILM."""
+"""Train and evaluate four ANN models for household NILM."""
 
 from __future__ import annotations
 
@@ -37,7 +37,13 @@ REGION_FILES = {
     "california": PROJECT_ROOT / "data" / "raw" / "california" / "readings_1min.csv",
     "austin": PROJECT_ROOT / "data" / "raw" / "austin" / "readings_1min.csv",
 }
-CHECKPOINT_FILES = {"MLP": "mlp_best.pt", "1D-CNN": "cnn_1d_best.pt"}
+MODEL_NAMES = ("MLP", "1D-CNN", "LSTM", "GRU")
+CHECKPOINT_FILES = {
+    "MLP": "mlp_best.pt",
+    "1D-CNN": "cnn_1d_best.pt",
+    "LSTM": "lstm_best.pt",
+    "GRU": "gru_best.pt",
+}
 APPLIANCES = ("air1", "furnace1", "drye1")
 APPLIANCE_NAMES = {
     "air1": "Air compressor circuit",
@@ -118,9 +124,40 @@ class MultiTaskCNN(nn.Module):
         )
 
 
+class MultiTaskRNN(nn.Module):
+    def __init__(
+        self, cell: str, appliance_count: int, hidden_size: int = 64
+    ) -> None:
+        super().__init__()
+        recurrent_layer = {"LSTM": nn.LSTM, "GRU": nn.GRU}.get(cell)
+        if recurrent_layer is None:
+            raise ValueError(f"Unknown recurrent cell: {cell}")
+        self.encoder = recurrent_layer(
+            input_size=1,
+            hidden_size=hidden_size,
+            num_layers=2,
+            batch_first=True,
+            dropout=0.2,
+        )
+        self.shared = nn.Sequential(
+            nn.Linear(hidden_size, 64),
+            nn.ReLU(),
+            nn.Dropout(0.2),
+        )
+        self.status_head = nn.Linear(64, appliance_count)
+        self.power_head = nn.Linear(64, appliance_count)
+
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        sequence, _ = self.encoder(x.unsqueeze(-1))
+        encoded = self.shared(sequence[:, -1, :])
+        return self.status_head(encoded), torch.nn.functional.softplus(
+            self.power_head(encoded)
+        )
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Train MLP and 1D-CNN NILM models on Pecan Street 1-minute data."
+        description="Train four ANN NILM models on Pecan Street 1-minute data."
     )
     parser.add_argument("--region", choices=REGION_FILES, default="austin")
     parser.add_argument("--csv", type=Path, help="Override the regional CSV path.")
@@ -164,6 +201,7 @@ def validate_evaluation_setup(args: argparse.Namespace) -> None:
 
     requested = {
         "region": args.region,
+        "models": list(MODEL_NAMES),
         "home_ids": args.home_ids,
         "test_home": args.test_home,
         "window_minutes": args.window,
@@ -380,6 +418,8 @@ def build_model(name: str, window_size: int) -> nn.Module:
         return MultiTaskMLP(window_size, len(APPLIANCES))
     if name == "1D-CNN":
         return MultiTaskCNN(len(APPLIANCES))
+    if name in ("LSTM", "GRU"):
+        return MultiTaskRNN(name, len(APPLIANCES))
     raise ValueError(f"Unknown model: {name}")
 
 
@@ -639,10 +679,15 @@ def save_plots(
     predictions: dict[str, tuple[np.ndarray, np.ndarray]],
     test_group: str,
 ) -> None:
-    figure, axes = plt.subplots(2, len(APPLIANCES), figsize=(15, 8))
+    figure, axes = plt.subplots(
+        len(predictions),
+        len(APPLIANCES),
+        figsize=(15, 4 * len(predictions)),
+        squeeze=False,
+    )
     for appliance_index, appliance in enumerate(APPLIANCES):
         truth = test_data.status[:, appliance_index]
-        for row, model_name in enumerate(("MLP", "1D-CNN")):
+        for row, model_name in enumerate(MODEL_NAMES):
             logits, _ = predictions[model_name]
             probability = 1.0 / (
                 1.0 + np.exp(-np.clip(logits[:, appliance_index], -80, 80))
@@ -887,9 +932,9 @@ include every scored minute.
   Input normalization statistics are fit using training readings only.
 - MLP: flattened {metadata['window_minutes']}-minute input, two hidden layers, shared encoder, status and
   power output heads.
-- 1D-CNN: convolutional encoder over the {metadata['window_minutes']}-minute input, with the same two
-  output tasks.
-- Both models use class-weighted binary cross entropy plus smooth L1 power loss.
+- 1D-CNN: convolutional encoder over the {metadata['window_minutes']}-minute input.
+- LSTM and GRU: two-layer recurrent encoders over the one-channel input sequence.
+- All four models use class-weighted binary cross entropy plus smooth L1 power loss.
   The best checkpoint is selected by mean validation macro-F1, with mean
   balanced accuracy as a tie-breaker.
 - Each model's ON/OFF probability cutoff is selected separately per appliance
@@ -1049,7 +1094,7 @@ def main() -> None:
     status_probability_thresholds: dict[str, dict[str, float]] = {}
     validation_threshold_metrics: dict[str, dict[str, dict[str, float]]] = {}
     log_rows: list[dict[str, Any]] = []
-    for name in ("MLP", "1D-CNN"):
+    for name in MODEL_NAMES:
         checkpoint_path = args.output_dir / "checkpoints" / CHECKPOINT_FILES[name]
         if args.evaluate_only:
             if not checkpoint_path.is_file():
@@ -1177,6 +1222,7 @@ def main() -> None:
 
     metadata = {
         "region": args.region,
+        "models": list(MODEL_NAMES),
         "home_ids": args.home_ids,
         "test_home": args.test_home,
         "window_minutes": args.window,

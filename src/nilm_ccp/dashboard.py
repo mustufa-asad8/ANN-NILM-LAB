@@ -197,6 +197,15 @@ def load_saved_results() -> tuple[pd.DataFrame | None, dict | None]:
 
 
 def build_submission_bundle() -> bytes:
+    checkpoint_files = [
+        OUTPUT_DIR / "checkpoints" / checkpoint_name
+        for checkpoint_name in (
+            "mlp_best.pt",
+            "cnn_1d_best.pt",
+            "lstm_best.pt",
+            "gru_best.pt",
+        )
+    ]
     files = [
         SCRIPT,
         ROOT / "app.py",
@@ -210,12 +219,12 @@ def build_submission_bundle() -> bytes:
         ROOT / "compose.yaml",
         ROOT / ".streamlit" / "config.toml",
         ROOT / "tests" / "test_training.py",
+        ROOT / "data" / "hosted" / "austin_eligible_homes.csv.gz",
         OUTPUT_DIR / "reports" / "report.md",
         OUTPUT_DIR / "metrics" / "metrics.csv",
         OUTPUT_DIR / "metadata" / "run_metadata.json",
         OUTPUT_DIR / "logs" / "training_log.csv",
-        OUTPUT_DIR / "checkpoints" / "mlp_best.pt",
-        OUTPUT_DIR / "checkpoints" / "cnn_1d_best.pt",
+        *[path for path in checkpoint_files if path.is_file()],
         *[
             OUTPUT_DIR / "figures" / filename
             for figure_names in PLOT_FILES.values()
@@ -329,6 +338,13 @@ def results_table(metrics: pd.DataFrame, test_group: str) -> pd.DataFrame:
 
 
 def render_results(metrics: pd.DataFrame, metadata: dict | None) -> None:
+    required_models = {"MLP", "1D-CNN", "LSTM", "GRU"}
+    saved_models = set(metrics["model"].dropna().astype(str))
+    if not required_models.issubset(saved_models):
+        st.info(
+            "These are results from an earlier run. Train all four models to "
+            "refresh the comparison with MLP, 1D-CNN, LSTM, and GRU."
+        )
     if metadata:
         home_ids = ", ".join(str(home) for home in metadata.get("home_ids", []))
         st.caption(
@@ -576,8 +592,11 @@ def main() -> None:
         else:
             if file_exists:
                 st.warning(
-                    "This region has fewer than five eligible homes for grid, air1, "
-                    "furnace1, and drye1. Choose another region or dataset."
+                    f"Only {len(eligible_homes)} eligible home"
+                    f"{'' if len(eligible_homes) == 1 else 's'} were found in "
+                    f"{selected_file.name}. The experiment needs at least five "
+                    "homes with complete grid, air1, furnace1, and drye1 readings "
+                    "and both ON/OFF examples. Use a CSV with at least five eligible homes."
                 )
             elif region_name in ("New York", "California"):
                 eligible_count = {"New York": 4, "California": 0}[region_name]
@@ -622,10 +641,17 @@ def main() -> None:
         )
 
     state_col, region_col, model_col = st.columns(3)
+    data_status = (
+        "Ready"
+        if file_exists and len(eligible_homes) >= 5
+        else "Too few homes"
+        if file_exists
+        else "Unavailable"
+    )
     with state_col:
         st.markdown(
             f'<div class="mini-card"><div class="label">DATA SOURCE</div>'
-            f'<div class="value">{"Ready" if file_exists else "Unavailable"}</div>'
+            f'<div class="value">{data_status}</div>'
             f'<div class="label">{selected_file.name}</div></div>',
             unsafe_allow_html=True,
         )
@@ -639,7 +665,7 @@ def main() -> None:
     with model_col:
         st.markdown(
             '<div class="mini-card"><div class="label">MODELS</div>'
-            '<div class="value">MLP + 1D-CNN</div>'
+            '<div class="value">MLP + CNN + LSTM + GRU</div>'
             '<div class="label">Status and power prediction</div></div>',
             unsafe_allow_html=True,
         )
@@ -647,7 +673,7 @@ def main() -> None:
     st.write("")
     st.subheader("Run an experiment")
     st.write(
-        "Train both models with identical splits, then compare their predictions "
+        "Train four models with identical splits, then compare their predictions "
         "on chronological and unseen-home test data."
     )
     homes: list[int] = []
@@ -671,7 +697,7 @@ def main() -> None:
             st.warning(validation_error)
 
     run_clicked = st.button(
-        "Train MLP and 1D-CNN",
+        "Train all four models",
         type="primary",
         width="stretch",
         disabled=(
@@ -724,7 +750,7 @@ def main() -> None:
     if metrics is not None:
         render_results(metrics, metadata)
     else:
-        st.info("No completed experiment yet. Configure the dataset and run both models to see results here.")
+        st.info("No completed experiment yet. Configure the dataset and run all four models to see results here.")
 
 
 if __name__ == "__main__":

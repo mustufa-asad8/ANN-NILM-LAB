@@ -1,14 +1,15 @@
 # ANN-Based NILM
 
 An ANN-based Non-Intrusive Load Monitoring (NILM) project for the CT-466
-Artificial Neural Networks course. It trains and compares a multi-task MLP and
-1D-CNN using only whole-home `grid` power to predict the ON/OFF state and power
-of `air1`, `furnace1`, and `drye1`.
+Artificial Neural Networks course. It trains and compares four multi-task
+architectures (MLP, 1D-CNN, LSTM, and GRU) using only whole-home `grid` power to
+predict the ON/OFF state and power of `air1`, `furnace1`, and `drye1`.
 
 Appliance channels are targets only; they are never model inputs. Source
 readings are in kW. The committed Austin evaluation holds out home `7951` from
-all training and validation. Its MLP and 1D-CNN results meet the CCP minimum
-accuracy, balanced-accuracy, and macro-F1 benchmarks for all three appliances.
+all training and validation. The report evaluates each model and appliance
+against the CCP targets; a model is not guaranteed to meet every target on
+every held-out split.
 
 ## Project layout
 
@@ -127,7 +128,9 @@ the test labels are not used for calibration.
 The required held-out classification benchmarks are accuracy >= 0.85,
 balanced accuracy >= 0.75, and macro-F1 >= 0.70 for each of three appliances.
 The excellent targets are 0.90, 0.85, and 0.80. Power MAE/RMSE are reported
-but have no fixed benchmark. The report includes per-appliance class counts,
+but have no fixed benchmark. No architecture can guarantee passing on every
+held-out home; scores must be measured on data not used for training or
+threshold selection. The report includes per-appliance class counts,
 confusion matrices, actual-versus-predicted power plots, model comparison,
 data-cleaning details, assumptions, and limitations.
 
@@ -142,7 +145,8 @@ Training and the dashboard update the following versioned deliverables under
 - `logs/training_log.csv`: training and validation metrics by epoch.
 - `metadata/run_metadata.json`: cohort, thresholds, split sizes, versions, and
   seed.
-- `checkpoints/`: validation-selected MLP and 1D-CNN model checkpoints.
+- `checkpoints/`: validation-selected MLP, 1D-CNN, LSTM, and GRU checkpoints
+  after a four-model training run.
 - `nilm_ccp_submission.zip`: submission bundle available from the
   dashboard.
 

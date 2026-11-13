@@ -32,6 +32,7 @@ class EvaluationSetupTests(unittest.TestCase):
     def test_evaluation_requires_saved_training_configuration(self) -> None:
         metadata = {
             "region": self.args.region,
+            "models": list(nilm_ccp.MODEL_NAMES),
             "home_ids": self.args.home_ids,
             "test_home": self.args.test_home,
             "window_minutes": self.args.window,
@@ -68,12 +69,22 @@ class EvaluationSetupTests(unittest.TestCase):
         nilm_ccp.validate_checkpoint_preprocessing(
             checkpoint, 1.0, 2.0, thresholds, "MLP"
         )
-
         thresholds["drye1"] = 0.4
         with self.assertRaisesRegex(ValueError, "ON thresholds"):
             nilm_ccp.validate_checkpoint_preprocessing(
                 checkpoint, 1.0, 2.0, thresholds, "MLP"
             )
+
+    def test_all_model_architectures_return_appliance_outputs(self) -> None:
+        for model_name in nilm_ccp.MODEL_NAMES:
+            with self.subTest(model=model_name):
+                model = nilm_ccp.build_model(model_name, window_size=120)
+                status_logits, estimated_power = model(
+                    nilm_ccp.torch.zeros((2, 120), dtype=nilm_ccp.torch.float32)
+                )
+                self.assertEqual(tuple(status_logits.shape), (2, 3))
+                self.assertEqual(tuple(estimated_power.shape), (2, 3))
+                self.assertTrue(nilm_ccp.torch.all(estimated_power >= 0))
 
 
 if __name__ == "__main__":
