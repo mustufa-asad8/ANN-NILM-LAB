@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from nilm_ccp import dashboard as nilm_dashboard
 from nilm_ccp import train as nilm_ccp
 
 
@@ -85,6 +86,32 @@ class EvaluationSetupTests(unittest.TestCase):
                 self.assertEqual(tuple(status_logits.shape), (2, 3))
                 self.assertEqual(tuple(estimated_power.shape), (2, 3))
                 self.assertTrue(nilm_ccp.torch.all(estimated_power >= 0))
+
+    def test_model_rankings_use_complete_appliance_results(self) -> None:
+        rows = []
+        for model, macro_f1 in (("MLP", 0.8), ("1D-CNN", 0.7)):
+            for appliance, channel in (
+                ("Air compressor circuit", "air1"),
+                ("Furnace and air handler", "furnace1"),
+                ("Electric clothes dryer", "drye1"),
+            ):
+                rows.append(
+                    {
+                        "model": model,
+                        "appliance": appliance,
+                        "channel": channel,
+                        "test_group": "unseen_home",
+                        "accuracy": 0.9,
+                        "balanced_accuracy": 0.8,
+                        "macro_f1": macro_f1,
+                        "mae_w": 50.0,
+                    }
+                )
+        rankings = nilm_dashboard.model_rankings(
+            nilm_ccp.pd.DataFrame(rows), "unseen_home"
+        )
+        self.assertEqual(rankings["model"].tolist(), ["MLP", "1D-CNN"])
+        self.assertEqual(rankings.iloc[0]["appliances_passing_all_targets"], 3)
 
 
 if __name__ == "__main__":

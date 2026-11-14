@@ -43,6 +43,7 @@ LEGACY_REGION_FILES = {
     / "1minute_data_austin.csv",
 }
 REGION_KEYS = {"New York": "newyork", "California": "california", "Austin": "austin"}
+MODEL_NAMES = ("MLP", "1D-CNN", "LSTM", "GRU")
 REQUIRED_SIGNAL_COLUMNS = ("grid", "air1", "furnace1", "drye1")
 MIN_COMPLETE_READINGS = 10_000
 MIN_CLASS_READINGS = 100
@@ -337,6 +338,121 @@ def results_table(metrics: pd.DataFrame, test_group: str) -> pd.DataFrame:
     return table
 
 
+def model_rankings(metrics: pd.DataFrame, test_group: str) -> pd.DataFrame:
+    subset = metrics.loc[metrics["test_group"] == test_group]
+    rankings: list[dict[str, object]] = []
+    for model_name in MODEL_NAMES:
+        model_rows = subset.loc[subset["model"] == model_name]
+        if (
+            len(model_rows) != 3
+            or set(model_rows["channel"]) != set(("air1", "furnace1", "drye1"))
+        ):
+            continue
+        rankings.append(
+            {
+                "model": model_name,
+                "accuracy": float(model_rows["accuracy"].mean()),
+                "balanced_accuracy": float(model_rows["balanced_accuracy"].mean()),
+                "macro_f1": float(model_rows["macro_f1"].mean()),
+                "mean_mae_w": float(model_rows["mae_w"].mean()),
+                "appliances_passing_all_targets": int(
+                    (
+                        (model_rows["accuracy"] >= 0.85)
+                        & (model_rows["balanced_accuracy"] >= 0.75)
+                        & (model_rows["macro_f1"] >= 0.70)
+                    ).sum()
+                ),
+            }
+        )
+    return pd.DataFrame(
+        rankings,
+        columns=(
+            "model",
+            "accuracy",
+            "balanced_accuracy",
+            "macro_f1",
+            "mean_mae_w",
+            "appliances_passing_all_targets",
+        ),
+    ).sort_values(
+        ["macro_f1", "balanced_accuracy", "accuracy"],
+        ascending=False,
+        ignore_index=True,
+    )
+
+
+def render_model_comparison(metrics: pd.DataFrame, test_group: str) -> None:
+    subset = metrics.loc[metrics["test_group"] == test_group]
+    rankings = model_rankings(metrics, test_group)
+    if rankings.empty:
+        st.info("No complete model results are available for this test split yet.")
+    else:
+        best = rankings.iloc[0]
+        st.subheader(f"Best model for this split: {best['model']}")
+        st.write(
+            f"Selected by highest mean macro-F1 across the three appliances "
+            f"({best['macro_f1']:.3f}). Mean accuracy: {best['accuracy']:.3f}; "
+            f"mean balanced accuracy: {best['balanced_accuracy']:.3f}; "
+            f"mean power MAE: {best['mean_mae_w']:.1f} W. "
+            f"It meets all three classification targets for "
+            f"{int(best['appliances_passing_all_targets'])} of 3 appliances."
+        )
+        st.caption(
+            "Recommendation is specific to this test split. Macro-F1 is the "
+            "ranking metric; the table below also reports benchmark passes."
+        )
+        st.dataframe(
+            rankings.rename(
+                columns={
+                    "accuracy": "Mean accuracy",
+                    "balanced_accuracy": "Mean balanced accuracy",
+                    "macro_f1": "Mean macro-F1",
+                    "mean_mae_w": "Mean power MAE (W)",
+                    "appliances_passing_all_targets": "Appliances passing all targets",
+                }
+            ),
+            width="stretch",
+            hide_index=True,
+            column_config={
+                "Mean accuracy": st.column_config.NumberColumn(format="%.3f"),
+                "Mean balanced accuracy": st.column_config.NumberColumn(format="%.3f"),
+                "Mean macro-F1": st.column_config.NumberColumn(format="%.3f"),
+                "Mean power MAE (W)": st.column_config.NumberColumn(format="%.1f"),
+            },
+        )
+
+    st.subheader("Per-model appliance results")
+    for model_name in MODEL_NAMES:
+        model_rows = subset.loc[subset["model"] == model_name]
+        st.markdown(f"**{model_name}**")
+        if (
+            len(model_rows) != 3
+            or set(model_rows["channel"]) != set(("air1", "furnace1", "drye1"))
+        ):
+            st.info(
+                f"No complete three-appliance results for {model_name} in this "
+                "run. Train all four models to populate this table."
+            )
+            continue
+        table = results_table(metrics.loc[metrics["model"] == model_name], test_group)
+        table = table.drop(columns="model")
+        st.dataframe(
+            table,
+            width="stretch",
+            hide_index=True,
+            column_config={
+                "accuracy": st.column_config.NumberColumn(format="%.3f"),
+                "balanced_accuracy": st.column_config.NumberColumn(format="%.3f"),
+                "macro_f1": st.column_config.NumberColumn(format="%.3f"),
+                "status_probability_threshold": st.column_config.NumberColumn(
+                    "Status cutoff", format="%.3f"
+                ),
+                "mae_w": st.column_config.NumberColumn("MAE (W)", format="%.1f"),
+                "rmse_w": st.column_config.NumberColumn("RMSE (W)", format="%.1f"),
+            },
+        )
+
+
 def render_results(metrics: pd.DataFrame, metadata: dict | None) -> None:
     required_models = {"MLP", "1D-CNN", "LSTM", "GRU"}
     saved_models = set(metrics["model"].dropna().astype(str))
@@ -357,21 +473,7 @@ def render_results(metrics: pd.DataFrame, metadata: dict | None) -> None:
     with tab_chrono:
         st.markdown('<div class="section-label">Later-time holdout</div>', unsafe_allow_html=True)
         metric_cards(metrics, "chronological_test")
-        st.dataframe(
-            results_table(metrics, "chronological_test"),
-            width="stretch",
-            hide_index=True,
-            column_config={
-                "accuracy": st.column_config.NumberColumn(format="%.3f"),
-                "balanced_accuracy": st.column_config.NumberColumn(format="%.3f"),
-                "macro_f1": st.column_config.NumberColumn(format="%.3f"),
-                "status_probability_threshold": st.column_config.NumberColumn(
-                    "Status cutoff", format="%.3f"
-                ),
-                "mae_w": st.column_config.NumberColumn("MAE (W)", format="%.1f"),
-                "rmse_w": st.column_config.NumberColumn("RMSE (W)", format="%.1f"),
-            },
-        )
+        render_model_comparison(metrics, "chronological_test")
         st.caption(
             "CCP minimums: accuracy 0.85 · balanced accuracy 0.75 · macro-F1 0.70. "
             "Status cutoffs are selected on validation data only."
@@ -380,21 +482,7 @@ def render_results(metrics: pd.DataFrame, metadata: dict | None) -> None:
     with tab_unseen:
         st.markdown('<div class="section-label">Held-out household</div>', unsafe_allow_html=True)
         metric_cards(metrics, "unseen_home")
-        st.dataframe(
-            results_table(metrics, "unseen_home"),
-            width="stretch",
-            hide_index=True,
-            column_config={
-                "accuracy": st.column_config.NumberColumn(format="%.3f"),
-                "balanced_accuracy": st.column_config.NumberColumn(format="%.3f"),
-                "macro_f1": st.column_config.NumberColumn(format="%.3f"),
-                "status_probability_threshold": st.column_config.NumberColumn(
-                    "Status cutoff", format="%.3f"
-                ),
-                "mae_w": st.column_config.NumberColumn("MAE (W)", format="%.1f"),
-                "rmse_w": st.column_config.NumberColumn("RMSE (W)", format="%.1f"),
-            },
-        )
+        render_model_comparison(metrics, "unseen_home")
         st.caption(
             "CCP minimums: accuracy 0.85 · balanced accuracy 0.75 · macro-F1 0.70. "
             "Status cutoffs are selected on validation data only."
@@ -478,7 +566,7 @@ def main() -> None:
         <div class="hero">
           <div class="eyebrow">NILM LAB · CT-466</div>
           <h1>See what the meter<br>can't show.</h1>
-          <p>Train and compare two neural networks that disaggregate household
+          <p>Train and compare four neural networks that disaggregate household
           power into appliance-level status and consumption.</p>
         </div>
         """,
