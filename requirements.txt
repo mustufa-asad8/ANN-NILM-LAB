@@ -3,4 +3,6 @@ pandas
 matplotlib
 scikit-learn
 streamlit
-torch
+--index-url https://download.pytorch.org/whl/cpu
+--extra-index-url https://pypi.org/simple
+torch==2.15.0+cpu

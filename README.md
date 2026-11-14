@@ -52,9 +52,10 @@ python -m venv .venv
 python -m pip install -r requirements.txt
 ```
 
-`requirements.txt` installs the dashboard, data-analysis, and PyTorch
-dependencies so Streamlit Cloud can train. `requirements-training.txt` is a
-convenience include for local training.
+`requirements.txt` installs the dashboard, data-analysis, and CPU-only PyTorch
+dependencies so Streamlit Cloud can train without downloading unused CUDA
+packages. `requirements-training.txt` is a convenience include for local
+training.
 
 Run the focused regression tests with:
 
