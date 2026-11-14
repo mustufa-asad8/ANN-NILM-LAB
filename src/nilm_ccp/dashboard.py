@@ -269,7 +269,12 @@ def run_training(command: list[str], log_placeholder, progress_bar) -> tuple[int
     reader.start()
     output: list[str] = []
     finished_reading = False
-    epoch_pattern = re.compile(r"epoch\s+(\d+)/(\d+)", re.IGNORECASE)
+    epoch_pattern = re.compile(
+        r"Starting model\s+(\d+)/(\d+):\s+(.+)|"
+        r"Completed model\s+(\d+)/(\d+):\s+(.+)|"
+        r"(.+?) epoch\s+(\d+)/(\d+)",
+        re.IGNORECASE,
+    )
     while process.poll() is None or not finished_reading:
         try:
             line = lines.get(timeout=0.2)
@@ -279,10 +284,31 @@ def run_training(command: list[str], log_placeholder, progress_bar) -> tuple[int
                 output.append(line)
                 match = epoch_pattern.search(line)
                 if match:
-                    progress_bar.progress(
-                        min(0.98, int(match.group(1)) / max(1, int(match.group(2)))),
-                        text=f"Training models · epoch {match.group(1)} of {match.group(2)}",
-                    )
+                    if match.group(1):
+                        model_index, model_count, model_name = match.group(1, 2, 3)
+                        progress_bar.progress(
+                            min(0.98, (int(model_index) - 1) / int(model_count)),
+                            text=f"Starting model {model_index} of {model_count} · {model_name}",
+                        )
+                    elif match.group(4):
+                        model_index, model_count, model_name = match.group(4, 5, 6)
+                        progress_bar.progress(
+                            min(0.98, int(model_index) / int(model_count)),
+                            text=f"Completed model {model_index} of {model_count} · {model_name}",
+                        )
+                    else:
+                        model_name, epoch, epoch_count = match.group(7, 8, 9)
+                        progress_bar.progress(
+                            min(
+                                0.98,
+                                (MODEL_NAMES.index(model_name) + int(epoch) / int(epoch_count))
+                                / len(MODEL_NAMES),
+                            ),
+                            text=(
+                                f"Training {model_name} · epoch {epoch} "
+                                f"of {epoch_count}"
+                            ),
+                        )
                 log_placeholder.code("\n".join(output[-28:]), language="text")
         except queue.Empty:
             if process.poll() is None:

@@ -80,12 +80,21 @@ class EvaluationSetupTests(unittest.TestCase):
         for model_name in nilm_ccp.MODEL_NAMES:
             with self.subTest(model=model_name):
                 model = nilm_ccp.build_model(model_name, window_size=120)
+                recurrent_lengths: list[int] = []
+                if model_name in ("LSTM", "GRU"):
+                    model.encoder.register_forward_pre_hook(
+                        lambda _module, inputs: recurrent_lengths.append(
+                            inputs[0].shape[1]
+                        )
+                    )
                 status_logits, estimated_power = model(
                     nilm_ccp.torch.zeros((2, 120), dtype=nilm_ccp.torch.float32)
                 )
                 self.assertEqual(tuple(status_logits.shape), (2, 3))
                 self.assertEqual(tuple(estimated_power.shape), (2, 3))
                 self.assertTrue(nilm_ccp.torch.all(estimated_power >= 0))
+                if model_name in ("LSTM", "GRU"):
+                    self.assertEqual(recurrent_lengths, [30])
 
     def test_model_rankings_use_complete_appliance_results(self) -> None:
         rows = []

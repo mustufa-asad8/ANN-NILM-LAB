@@ -126,12 +126,13 @@ class MultiTaskCNN(nn.Module):
 
 class MultiTaskRNN(nn.Module):
     def __init__(
-        self, cell: str, appliance_count: int, hidden_size: int = 64
+        self, cell: str, window_size: int, appliance_count: int, hidden_size: int = 32
     ) -> None:
         super().__init__()
         recurrent_layer = {"LSTM": nn.LSTM, "GRU": nn.GRU}.get(cell)
         if recurrent_layer is None:
             raise ValueError(f"Unknown recurrent cell: {cell}")
+        self.sequence_length = max(1, window_size // 4)
         self.encoder = recurrent_layer(
             input_size=1,
             hidden_size=hidden_size,
@@ -148,7 +149,10 @@ class MultiTaskRNN(nn.Module):
         self.power_head = nn.Linear(64, appliance_count)
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        sequence, _ = self.encoder(x.unsqueeze(-1))
+        compressed = torch.nn.functional.adaptive_avg_pool1d(
+            x.unsqueeze(1), self.sequence_length
+        ).transpose(1, 2)
+        sequence, _ = self.encoder(compressed)
         encoded = self.shared(sequence[:, -1, :])
         return self.status_head(encoded), torch.nn.functional.softplus(
             self.power_head(encoded)
@@ -419,7 +423,7 @@ def build_model(name: str, window_size: int) -> nn.Module:
     if name == "1D-CNN":
         return MultiTaskCNN(len(APPLIANCES))
     if name in ("LSTM", "GRU"):
-        return MultiTaskRNN(name, len(APPLIANCES))
+        return MultiTaskRNN(name, window_size, len(APPLIANCES))
     raise ValueError(f"Unknown model: {name}")
 
 
@@ -1094,7 +1098,11 @@ def main() -> None:
     status_probability_thresholds: dict[str, dict[str, float]] = {}
     validation_threshold_metrics: dict[str, dict[str, dict[str, float]]] = {}
     log_rows: list[dict[str, Any]] = []
-    for name in MODEL_NAMES:
+    for model_index, name in enumerate(MODEL_NAMES, start=1):
+        print(
+            f"Starting model {model_index}/{len(MODEL_NAMES)}: {name}",
+            flush=True,
+        )
         checkpoint_path = args.output_dir / "checkpoints" / CHECKPOINT_FILES[name]
         if args.evaluate_only:
             if not checkpoint_path.is_file():
@@ -1202,6 +1210,16 @@ def main() -> None:
                 "status_probability_thresholds": model_thresholds,
             },
             checkpoint_path,
+        )
+        pd.DataFrame(all_results).to_csv(
+            args.output_dir / "metrics" / "metrics.csv", index=False
+        )
+        pd.DataFrame(log_rows).to_csv(
+            args.output_dir / "logs" / "training_log.csv", index=False
+        )
+        print(
+            f"Completed model {model_index}/{len(MODEL_NAMES)}: {name}",
+            flush=True,
         )
 
     results_frame = pd.DataFrame(all_results)
